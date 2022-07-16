@@ -14,28 +14,35 @@ class Trainer(object):
         self.dataset.update_model(self.policy_model)
         self.batch_size = 32
         self.gamma = 0.95
-        self.epochs = 2000
+        self.epochs = 100
         self.target_update = 10
-        self.steps = 0
-        self.dataset.update_epsilon(self.steps)
         self.optimizer = optimizers.Adam(1e-4, epsilon=1e-8)
+        self.summary_write = tf.summary.create_file_writer(r'./logs')
 
     def train(self):
         temp = tf.random.normal((4, 80, 80, 4))
         self.policy_model(temp, training=False)
         self.target_model(temp, training=False)  # build model
+        steps = 0
+        self.dataset.update_epsilon(steps)
         for epoch in range(self.epochs):
             # K.set_value(self.optimizer.learning_rate, 1e-4 * 2.7 ** (-epoch // 200))
             if epoch % self.target_update == 0:
                 self.target_model.set_weights(self.policy_model.get_weights())
-            loss = None
-            for step, x in enumerate(self.dataset.generator(self.batch_size, 4)):
+            loss = 0
+            epoch_step = 0
+            for x in self.dataset.generator(self.batch_size, 4):
                 if x is None:
                     continue
-                self.steps += 1
-                loss = self.train_step(x)
-                self.dataset.update_epsilon(self.steps)
-            print(f"epoch: {epoch}, loss: {loss}")
+                epoch_step += 1
+                steps += 1
+                loss += self.train_step(x)
+                self.dataset.update_epsilon(steps)
+            if epoch_step > 0:
+                with self.summary_write.as_default():
+                    tf.summary.scalar('step', epoch_step, step=epoch)
+                    tf.summary.scalar('loss', loss / epoch_step, step=epoch)
+                print(f"epoch: {epoch}, step:{epoch_step}, loss: {loss / epoch_step}")
 
     def train_step(self, x):
         with tf.GradientTape() as tape:
