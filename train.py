@@ -1,6 +1,7 @@
 from data.generator import Dataset
 from nets.model import DinoModel
 from tensorflow.keras import optimizers, losses, backend as K
+import numpy as np
 import tensorflow as tf
 
 from util.agent import Agent
@@ -20,9 +21,10 @@ class Trainer(object):
         self.summary_write = tf.summary.create_file_writer(r'./logs')
 
     def train(self):
-        temp = tf.random.normal((4, 80, 80, 4))
-        self.policy_model(temp, training=False)
-        self.target_model(temp, training=False)  # build model
+        dummy_input = tf.random.normal((4, 80, 80, 4))
+        dummy_step = np.zeros((4, 1), dtype=np.int32)
+        self.policy_model((dummy_input, dummy_step), training=False)
+        self.target_model((dummy_input, dummy_step), training=False)  # build model
         steps = 0
         self.dataset.update_epsilon(steps)
         for epoch in range(self.epochs):
@@ -46,12 +48,12 @@ class Trainer(object):
 
     def train_step(self, x):
         with tf.GradientTape() as tape:
-            s, a, r, sn = x
+            s, a, r, sn, step = x
             act = list(zip(range(a.shape[0]), a))
-            Q = tf.gather_nd(self.policy_model(s, training=True), act)
-            an = tf.argmax(self.policy_model(sn, training=False), axis=-1).numpy()
+            Q = tf.gather_nd(self.policy_model((s, step), training=True), act)
+            an = tf.argmax(self.policy_model((sn, step + 1), training=False), axis=-1).numpy()
             actn = list(zip(range(an.shape[0]), an))
-            Qn = tf.gather_nd(self.target_model(sn, training=False), actn)
+            Qn = tf.gather_nd(self.target_model((sn, step + 1), training=False), actn)
             Qn = tf.stop_gradient(Qn)
             Qn = tf.where(r == -100, r, r + self.gamma * Qn)
             # loss = tf.reduce_mean((Q - Qn) ** 2)

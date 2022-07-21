@@ -21,9 +21,11 @@ class DinoModel(Model):
         self.dense1 = layers.Dense(1153, kernel_initializer='he_uniform')
         self.dense2 = layers.Dense(1153, kernel_initializer='he_uniform')
         self.classifier = layers.Dense(self.ACTIONS, kernel_initializer='he_uniform')
+        self.time_feature = layers.Embedding(20, 3456)
 
     def call(self, inputs, training=None, mask=None):
-        x = inputs
+        x, step = inputs
+        step = tf.minimum(step // 100, 19)
         x = self.conv1(x)
         x = self.bn1(x, training=training)
         x = self.active(x)
@@ -34,6 +36,7 @@ class DinoModel(Model):
         x = self.bn3(x, training=training)
         x = self.active(x)
         x = self.flatten(x)
+        x += tf.squeeze(self.time_feature(step))
         x = self.dense1(x)
         x = self.active(x)
         x = self.dense2(x)

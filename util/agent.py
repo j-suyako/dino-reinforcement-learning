@@ -70,9 +70,9 @@ class Agent(object):
         elif action == UP:
             reward = 1
         elif action == DOWN:
-            reward = 3
+            reward = 1
         else:
-            reward = 7
+            reward = 5
         return image, terminal, reward, distance
 
 

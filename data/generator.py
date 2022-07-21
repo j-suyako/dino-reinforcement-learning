@@ -26,7 +26,8 @@ class ReplayMemory(object):
         return (np.concatenate(replay[:, 0]), 
                 np.array(replay[:, 1], np.uint8), 
                 np.array(replay[:, 2], np.float32), 
-                np.concatenate(replay[:, 3]))
+                np.concatenate(replay[:, 3]),
+                np.expand_dims(np.array(replay[:, 4], np.int32), axis=-1))
 
     def __len__(self):
         return len(self.memory)
@@ -52,45 +53,37 @@ class Dataset(object):
         unharmful = roi > 200
         image[unharmful] = 0
         image = np.array(Image.fromarray(image).resize((80, 80))) / 255.0
-        # image = image.resize((80, 80))
-        # image = np.array(image, np.float32) / 255
         self.state.append(image)
         while len(self.state) < 4:
             self.state.append(image)
         self.state = self.state[-4:]
         return np.expand_dims(np.stack(self.state, axis=-1), axis=0)
 
-    def select_action(self, state):
+    def select_action(self, state, step):
         if np.random.random() <= self.epsilon:
             return np.random.randint(3), True
-        return tf.argmax(self.model(state, training=False), axis=-1)[0].numpy(), False
+        return tf.argmax(self.model((state, step), training=False), axis=-1)[0].numpy(), False
 
     def generator(self, batch_size, cnt=4):
         if self.model is None:
             raise ValueError("must set target model first")
         terminal = False
-        # if self.agent.client is None:
         curr_frame, terminal, _, _ = self.agent.start_game()
         curr_state = self.prepare_state(curr_frame)
-        # else:
-        #     curr_frame, terminal, _, _ = self.agent.do_action(0)
-        #     time.sleep(3)
-        #     # curr_frame, terminal, _, _ = self.agent.do_action(1)
-        #     curr_state = self.prepare_state(curr_frame)
-        step = 0
-        replay = ReplayMemory(500)
+        step = np.array([0], dtype=np.int32)
+        # replay = ReplayMemory(500)
         actions = list()
         while not terminal:
-            # start_frame, terminal, start_reward = self.agent.start_game()
-            # state = self.prepare_state(curr_frame)
-            action, random = self.select_action(curr_state)
+            action, random = self.select_action(curr_state, step)
             actions.append(str(action) + ("*" if random else ""))
             next_frame, terminal, reward, distance = self.agent.do_action(action)
             next_state = self.prepare_state(next_frame)
-            replay.push((curr_state, action, reward, next_state, distance))
-            self.short_replays.push((curr_state, action, reward, next_state, distance))
+            # replay.push((curr_state, action, reward, next_state, distance))
+            self.short_replays.push((curr_state, action, reward, next_state, step))
             curr_state = next_state
             step += 1
+            # yield self.short_replays.sample(batch_size)
+        for _ in range(int(step[0])):
             yield self.short_replays.sample(batch_size)
         # print(step, '...' + ','.join(actions[-10:]))
         # if step > 50:
